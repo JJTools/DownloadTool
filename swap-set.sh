@@ -178,7 +178,7 @@ swapon "${SWAP_FILE}" || { echo "启用swap失败"; exit 1; }
 cp /etc/fstab /etc/fstab.bak
 echo "已备份 /etc/fstab 到 /etc/fstab.bak"
 
-# 从fstab中移除旧的swap配置
+# 从fstab中移除旧的swap���置
 sed -i '/.*swap.*sw.*/d' /etc/fstab
 
 # 添加新的swap配置
@@ -188,6 +188,29 @@ echo "${SWAP_FILE} none swap sw 0 0" | tee -a /etc/fstab || {
     echo "已恢复fstab备份"
     exit 1
 }
+
+# 设置合适的swappiness值
+SWAPPINESS=20
+echo "设置swappiness值为 ${SWAPPINESS}..."
+if [ -f /proc/sys/vm/swappiness ]; then
+    # 立即设置当前swappiness
+    echo ${SWAPPINESS} > /proc/sys/vm/swappiness || echo "警告: 无法立即设置swappiness值"
+    
+    # 持久化设置swappiness
+    if [ -d /etc/sysctl.d ]; then
+        echo "vm.swappiness=${SWAPPINESS}" > /etc/sysctl.d/99-swappiness.conf || echo "警告: 无法创建持久化swappiness配置"
+    else
+        # 如果/etc/sysctl.d不存在，尝试直接修改sysctl.conf
+        if ! grep -q "^vm.swappiness" /etc/sysctl.conf; then
+            echo "vm.swappiness=${SWAPPINESS}" >> /etc/sysctl.conf
+        else
+            sed -i "s/^vm.swappiness=.*/vm.swappiness=${SWAPPINESS}/" /etc/sysctl.conf
+        fi
+    fi
+    
+    # 应用sysctl设置
+    sysctl -p >/dev/null 2>&1 || echo "警告: 无法应用sysctl设置"
+fi
 
 echo "Swap文件创建并激活成功！"
 echo "大小: ${swap_size_mb}MB"
